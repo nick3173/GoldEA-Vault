@@ -1,0 +1,198 @@
+//+------------------------------------------------------------------+
+//|       GoldEAResurrection_v4_13_MicroV_LegHarvest_RiskFreeGate    |
+//|  True M1 Scalper - Micro V Reversal Model (no fractals)          |
+//|                                                                  |
+//|  RISK-FREE GATE: First trade must hit TP1/Risk-Free before       |
+//|  additional Leg Harvesting entries are allowed.                  |
+//+------------------------------------------------------------------+
+#property copyright "Copyright 2026"
+#property link      "https://www.mql5.com"
+#property version   "4.13"
+#property strict
+
+#include <Trade/Trade.mqh>
+#include <Trade/PositionInfo.mqh>
+
+CTrade trade;
+CPositionInfo pos;
+
+//-------------------- Inputs --------------------
+input ulong   InpMagic             = 26032026;
+input double  InpFixedLot          = 0.10;
+input int     InpMaxStackPerDir    = 3;
+
+input int     InpATRPeriod         = 14;
+input double  InpSLBufferATRMult   = 0.15;
+
+input int     InpStructLookback    = 40;   
+input int     InpSessionBars       = 300;  
+
+// Pattern tuning
+input double  InpRetraceMax        = 0.50; 
+input double  InpRejectionWickBody = 1.20; 
+input bool    InpRequireBearishPushForEngulf = true; 
+
+// Trailing / exit
+input int     InpTrailStartPips    = 100;
+input double  InpTrailLockPercent  = 50.0;
+input double  InpTP1ClosePercent   = 50.0;  
+
+// Profit rules (money-based)
+input double  InpTP1Money          = 40.0;  
+input double  InpRiskFreeLockMoney = 5.0;   
+input double  InpRunnerDrawdownMoney = 15.0; 
+input double  InpRunnerPeakMinMoney  = 40.0; 
+
+input int     InpSlippagePoints    = 30;
+
+// Execution / safety filters
+input int     InpTradeCooldownSeconds   = 60;   
+input int     InpMaxSpreadPoints        = 80;   
+
+// Leg harvesting
+input bool    InpEnableLegHarvesting    = true;
+input int     InpMaxEntriesPerLeg       = 5;
+input int     InpLegMaxBars             = 60;
+input int     InpLegPullbackLookback    = 4;
+input double  InpLegMaxRetrace          = 0.50;
+input double  InpDispBodyMult           = 1.6;
+input double  InpDispStrongCloseFrac    = 0.25;
+input int     InpDispAvgBodyBars        = 10;
+
+// Emergency pause
+input double  InpAbnormalRangeATRMult   = 4.0;
+input double  InpAbnormalSpreadMult     = 2.5;
+input int     InpPauseMinutesOnAbnormal = 30;
+
+// Recovery conditions
+input double  InpRecoveryATRMult        = 1.6;
+input int     InpRecoveryBars           = 5;
+input int     InpATRAvgBars             = 20;
+input int     InpSpreadAvgBars          = 30;
+
+// Debug
+input bool    InpShowHUD           = true;
+input bool    InpVerboseLogs       = true;
+
+//-------------------- State --------------------
+datetime g_lastBarTime=0;
+datetime g_lastTradeTime=0;
+datetime g_pauseUntil=0;
+int      g_recoveryCount=0;
+string   g_pauseReason="";
+
+// Profit tracking arrays
+ulong    g_tickets[];
+bool     g_tp1done[];
+double   g_peakProfit[];
+
+// Leg State
+int      g_legDir=0;
+int      g_legEntries=0;
+int      g_legBars=0;
+bool     g_legActive=false;
+double   g_legProtected=0;
+double   g_legImpulseHigh=0;
+double   g_legImpulseLow=0;
+
+//-------------------- Helpers --------------------
+double PipToPrice(){ if(_Digits==3||_Digits==5) return 10.0*_Point; return _Point; }
+
+double SpreadPoints() { return (SymbolInfoDouble(_Symbol,SYMBOL_ASK)-SymbolInfoDouble(_Symbol,SYMBOL_BID))/_Point; }
+
+int CountPositions(int dir) {
+   int c=0;
+   for(int i=PositionsTotal()-1;i>=0;i--) {
+      if(!pos.SelectByIndex(i)) continue;
+      if(pos.Symbol()!=_Symbol || (ulong)pos.Magic()!=InpMagic) continue;
+      if(dir== 1 && pos.PositionType()==POSITION_TYPE_BUY)  c++;
+      if(dir==-1 && pos.PositionType()==POSITION_TYPE_SELL) c++;
+   }
+   return c;
+}
+
+// Risk-Free Gate Logic
+bool IsGateOpen(int dir) {
+   if(CountPositions(dir) == 0) return true;
+   for(int i=0; i<ArraySize(g_tickets); i++) {
+      if(PositionSelectByTicket(g_tickets[i]) && g_tp1done[i]) return true;
+   }
+   return false;
+}
+
+//-------------------- Entries --------------------
+bool OpenBuy(double sl, double tp2, double structProtected, string &err) {
+   if(CountPositions(-1) > 0) { err="Opposite positions exist"; return false; }
+   if(CountPositions(1) >= InpMaxStackPerDir) { err="Stack limit reached"; return false; }
+   if(!IsGateOpen(1)) { err="Risk-Free Gate Locked"; return false; }
+
+   trade.SetExpertMagicNumber(InpMagic);
+   double price=SymbolInfoDouble(_Symbol,SYMBOL_ASK);
+   bool ok=trade.Buy(InpFixedLot,_Symbol,price,sl,tp2,"GoldEAResurrection v4.13 BUY");
+   if(ok) {
+      g_lastTradeTime=TimeCurrent();
+      TrackNewTicket(trade.ResultOrder(), false, 0);
+   }
+   return ok;
+}
+
+bool OpenSell(double sl, double tp2, double structProtected, string &err) {
+   if(CountPositions(1) > 0) { err="Opposite positions exist"; return false; }
+   if(CountPositions(-1) >= InpMaxStackPerDir) { err="Stack limit reached"; return false; }
+   if(!IsGateOpen(-1)) { err="Risk-Free Gate Locked"; return false; }
+
+   trade.SetExpertMagicNumber(InpMagic);
+   double price=SymbolInfoDouble(_Symbol,SYMBOL_BID);
+   bool ok=trade.Sell(InpFixedLot,_Symbol,price,sl,tp2,"GoldEAResurrection v4.13 SELL");
+   if(ok) {
+      g_lastTradeTime=TimeCurrent();
+      TrackNewTicket(trade.ResultOrder(), false, 0);
+   }
+   return ok;
+}
+
+void TrackNewTicket(ulong tk, bool tp1, double peak) {
+   int n=ArraySize(g_tickets);
+   ArrayResize(g_tickets,n+1); ArrayResize(g_tp1done,n+1); ArrayResize(g_peakProfit,n+1);
+   g_tickets[n]=tk; g_tp1done[n]=tp1; g_peakProfit[n]=peak;
+}
+
+//-------------------- Core Loops --------------------
+void OnTick() {
+   if(IsPaused()) {
+      if(TimeCurrent() >= g_pauseUntil) g_pauseUntil=0;
+      else return;
+   }
+   
+   ManageProfitRules();
+   
+   // Check for new bar logic
+   datetime t=iTime(_Symbol,PERIOD_M1,0);
+   if(t != g_lastBarTime) {
+      g_lastBarTime = t;
+      UpdateLegStateOnNewBar();
+      // Placeholder for Pattern Detection Logic...
+   }
+}
+
+bool IsPaused() { return (TimeCurrent() < g_pauseUntil); }
+
+void ManageProfitRules() {
+   for(int i=PositionsTotal()-1; i>=0; i--) {
+      if(!pos.SelectByIndex(i) || (ulong)pos.Magic()!=InpMagic) continue;
+      // Partial close and SL move logic here...
+      // If profit >= InpTP1Money, move SL to InpRiskFreeLockMoney
+   }
+}
+
+void UpdateLegStateOnNewBar() {
+   if(!InpEnableLegHarvesting) return;
+   g_legBars++;
+   if(g_legBars > InpLegMaxBars) g_legActive=false;
+}
+
+int OnInit() {
+   Print("GoldEAResurrection v4.13 Initialized with Risk-Free Gate");
+   return INIT_SUCCEEDED;
+}
+
