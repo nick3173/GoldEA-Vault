@@ -1,0 +1,70 @@
+//@version=5
+indicator("ICT/SMC High Prob - Donchian Edition", overlay=false, max_boxes_count=500)
+
+// =====================
+// 1. INPUTS & SETTINGS
+// =====================
+hpThreshold = input.float(1.2, "Displacement Multiplier", minval=1.0, step=0.1)
+dcPeriod    = input.int(20, "Donchian Channel Period", minval=1)
+showFVG     = input.bool(true, "Show FVG")
+showOB      = input.bool(true, "Show OB")
+
+// =====================
+// 2. PRICE OVERLAY ELEMENTS (MAs, BB, & Donchian)
+// =====================
+plot(ta.sma(close, 21),  color=color.blue,   title="MA 21",  force_overlay=true)
+plot(ta.sma(close, 50),  color=color.orange, title="MA 50",  force_overlay=true)
+plot(ta.sma(close, 200), color=color.red,    title="MA 200", force_overlay=true)
+
+// BB Settings: 40 EMA, 0.2 Mult
+basis = ta.ema(close, 40)
+dev   = 0.2 * ta.stdev(close, 40)
+uBB   = plot(basis + dev, color=color.new(color.green, 50), force_overlay=true)
+lBB   = plot(basis - dev, color=color.new(color.green, 50), force_overlay=true)
+fill(uBB, lBB, color=color.new(color.green, 95))
+
+// Donchian Channels (External Liquidity)
+dcUpper = ta.highest(high, dcPeriod)
+dcLower = ta.lowest(low, dcPeriod)
+dcMid   = (dcUpper + dcLower) / 2
+
+plot(dcUpper, "DC Upper (External Liquidity)", color=color.new(color.gray, 50), force_overlay=true)
+plot(dcLower, "DC Lower (External Liquidity)", color=color.new(color.gray, 50), force_overlay=true)
+plot(dcMid,   "DC Midline (MSS Level)",        color=color.new(color.white, 70), style=plot.style_linebr, force_overlay=true)
+
+// =====================
+// 3. SMC LOGIC & BOXES
+// =====================
+var fvgBoxes = array.new_box()
+var obBoxes  = array.new_box()
+
+bodySize     = math.abs(close - open)
+avgBody      = ta.sma(bodySize, 20)
+displacement = bodySize > avgBody * hpThreshold
+
+if showFVG and displacement
+    if low > high[2]
+        array.push(fvgBoxes, box.new(bar_index[2], low, bar_index, high[2], bgcolor=color.new(color.green, 85), border_color=na, extend=extend.right, force_overlay=true))
+    if high < low[2]
+        array.push(fvgBoxes, box.new(bar_index[2], low[2], bar_index, high, bgcolor=color.new(color.red, 85), border_color=na, extend=extend.right, force_overlay=true))
+
+// Mitigation Logic
+if array.size(fvgBoxes) > 0
+    for i = array.size(fvgBoxes) - 1 to 0
+        b = array.get(fvgBoxes, i)
+        if (close < box.get_bottom(b) and box.get_top(b) > box.get_bottom(b)) or (close > box.get_top(b) and box.get_bottom(b) > box.get_top(b))
+            box.delete(b)
+            array.remove(fvgBoxes, i)
+
+// =====================
+// 4. STOCHASTIC RSI (30, 3, 3)
+// =====================
+rsiVal = ta.rsi(close, 14)
+stoch  = ta.stoch(rsiVal, rsiVal, rsiVal, 30)
+k = ta.sma(stoch, 3)
+d = ta.sma(k, 3)
+
+plot(k, "K", color=#2962FF)
+plot(d, "D", color=#FF6D00)
+hline(80, "Upper Band", color=color.gray, linestyle=hline.style_dashed)
+hline(20, "Lower Band", color=color.gray, linestyle=hline.style_dashed)
