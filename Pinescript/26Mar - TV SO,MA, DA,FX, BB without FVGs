@@ -1,0 +1,92 @@
+// © tradeforopp - ICT Master Suite [TFO Engine Integration]
+//@version=6
+indicator("ICT Master Suite [V9 Integrated]", overlay=false, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
+
+// =====================
+// 0. GLOBAL SETTINGS (TFO Engine)
+// =====================
+group_gen     = "Drawing Settings"
+max_days      = input.int(3, "Session Drawing Limit", 1, group=group_gen)
+gmt_tz        = input.string('America/New_York', "Timezone", group=group_gen)
+show_kz_text  = input.bool(true, "Display Session Names", group=group_gen)
+box_transp    = input.int(92, "Box Transparency", 0, 100, group=group_gen)
+
+// =====================
+// 1. CORE PRICE ACTION (SO, BB, MA, DC)
+// =====================
+// These are force-overlaid to the price chart
+group_core = "Core Price Logic"
+show_bb    = input.bool(true, "Show Bollinger Equilibrium", group=group_core)
+bb_basis   = ta.ema(close, 40)
+bb_dev     = 0.2 * ta.stdev(close, 40)
+p1 = plot(show_bb ? bb_basis + bb_dev : na, "BB Upper", color=color.new(#2962FF, 80), force_overlay=true)
+p2 = plot(show_bb ? bb_basis - bb_dev : na, "BB Lower", color=color.new(#2962FF, 80), force_overlay=true)
+fill(p1, p2, color=color.new(#2962FF, 96), title="Equilibrium Fill")
+
+// Moving Averages & Donchian Channels (DC)
+plot(ta.ema(close, 21),  "EMA 21",  color=color.new(color.blue, 50),  force_overlay=true)
+plot(ta.ema(close, 50),  "EMA 50",  color=color.new(color.orange, 50), force_overlay=true)
+plot(ta.ema(close, 200), "EMA 200", color=color.new(color.red, 50),    force_overlay=true)
+plot(ta.highest(high, 20), "DC High", color=color.new(color.gray, 85), force_overlay=true)
+plot(ta.lowest(low, 20),  "DC Low",  color=color.new(color.gray, 85), force_overlay=true)
+
+// =====================
+// 2. UPGRADED SESSION BOXES (TFO Logic)
+// =====================
+group_kz = "Killzone Schedules"
+
+// Function to handle the TFO-style session drawing
+f_draw_kz(sess_id, sess_name, sess_time, sess_col) =>
+    var box[] boxes = array.new_box()
+    var label[] labels = array.new_label()
+    
+    in_sess = not na(time(timeframe.period, sess_time, gmt_tz))
+    is_new  = in_sess and na(time(timeframe.period, sess_time, gmt_tz)[1])
+    
+    if is_new
+        array.unshift(boxes, box.new(bar_index, high, bar_index, low, bgcolor=color.new(sess_col, box_transp), border_color=na, force_overlay=true))
+        if show_kz_text
+            array.unshift(labels, label.new(bar_index, high, sess_name, color=color.new(sess_col, 20), textcolor=color.white, style=label.style_label_down, size=size.small, force_overlay=true))
+        
+        // Drawing Limit logic (Core Protection)
+        if array.size(boxes) > max_days
+            box.delete(array.pop(boxes))
+            if show_kz_text
+                label.delete(array.pop(labels))
+                
+    if in_sess and array.size(boxes) > 0
+        current_box = array.get(boxes, 0)
+        box.set_right(current_box, bar_index)
+        box.set_top(current_box, math.max(high, box.get_top(current_box)))
+        box.set_bottom(current_box, math.min(low, box.get_bottom(current_box)))
+        if show_kz_text
+            current_lbl = array.get(labels, 0)
+            label.set_x(current_lbl, bar_index)
+            label.set_y(current_lbl, box.get_top(current_box))
+
+// Execute Sessions from TFO Core
+f_draw_kz("ASIA", "Asia",     input.session("2000-0000", "Asia Time", group=group_kz), color.blue)
+f_draw_kz("LON",  "London",   input.session("0200-0500", "London Time", group=group_kz), color.red)
+f_draw_kz("NYAM", "NY AM",    input.session("0930-1100", "NY AM Time", group=group_kz), #089981)
+f_draw_kz("NYLU", "NY Lunch", input.session("1200-1300", "NY Lunch Time", group=group_kz), color.yellow)
+f_draw_kz("NYPM", "NY PM",    input.session("1330-1600", "NY PM Time", group=group_kz), color.purple)
+
+// =====================
+// 3. MOMENTUM CORE (Stoch RSI)
+// =====================
+// Plotted in the lower panel (overlay=false)
+group_stoch = "Stoch RSI Settings"
+rsi_len = input.int(14, "RSI Length", group=group_stoch)
+stoch_len = input.int(14, "Stoch Length", group=group_stoch)
+k_smooth = input.int(3, "K Smoothing", group=group_stoch)
+d_smooth = input.int(3, "D Smoothing", group=group_stoch)
+
+rsi_val = ta.rsi(close, rsi_len)
+stoch_k = ta.sma(ta.stoch(rsi_val, rsi_val, rsi_val, stoch_len), k_smooth)
+stoch_d = ta.sma(stoch_k, d_smooth)
+
+plot(stoch_k, "Stoch K", color=#2962FF, linewidth=2)
+plot(stoch_d, "Stoch D", color=#FF6D00, linewidth=2)
+hline(80, "OB", color=color.new(color.gray, 50))
+hline(50, "EQ", color=color.new(color.gray, 70), linestyle=hline.style_dotted)
+hline(20, "OS", color=color.new(color.gray, 50))
