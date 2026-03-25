@@ -1,0 +1,168 @@
+// This work is licensed under Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License (CC BY-NC-SA 4.0) https://creativecommons.org/licenses/by-nc-sa/4.0/
+// © Trendoscope Pty Ltd
+//                                       ░▒             
+//                                  ▒▒▒   ▒▒      
+//                              ▒▒▒▒▒     ▒▒      
+//                      ▒▒▒▒▒▒▒░     ▒     ▒▒          
+//                  ▒▒▒▒▒▒           ▒     ▒▒          
+//             ▓▒▒▒       ▒        ▒▒▒▒▒▒▒▒▒▒▒  
+//   ▒▒▒▒▒▒▒▒▒▒▒ ▒        ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒         
+//   ▒  ▒       ░▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░        
+//   ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░▒▒▒▒▒▒▒▒         
+//   ▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ ▒▒                       
+//    ▒▒▒▒▒         ▒▒▒▒▒▒▒                            
+//                 ▒▒▒▒▒▒▒▒▒                           
+//                ▒▒▒▒▒ ▒▒▒▒▒                          
+//               ░▒▒▒▒   ▒▒▒▒▓      ████████╗██████╗ ███████╗███╗   ██╗██████╗  ██████╗ ███████╗ ██████╗ ██████╗ ██████╗ ███████╗
+//              ▓▒▒▒▒     ▒▒▒▒      ╚══██╔══╝██╔══██╗██╔════╝████╗  ██║██╔══██╗██╔═══██╗██╔════╝██╔════╝██╔═══██╗██╔══██╗██╔════╝
+//              ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒        ██║   ██████╔╝█████╗  ██╔██╗ ██║██║  ██║██║   ██║███████╗██║     ██║   ██║██████╔╝█████╗ 
+//             ▒▒▒▒▒       ▒▒▒▒▒       ██║   ██╔══██╗██╔══╝  ██║╚██╗██║██║  ██║██║   ██║╚════██║██║     ██║   ██║██╔═══╝ ██╔══╝  
+//            ▒▒▒▒▒         ▒▒▒▒▒      ██║   ██║  ██║███████╗██║ ╚████║██████╔╝╚██████╔╝███████║╚██████╗╚██████╔╝██║     ███████╗
+//             ▒▒             ▒                        
+//@version=6
+
+import Trendoscope/utils/1 as ut
+import Trendoscope/ohlc/3 as o
+import Trendoscope/LineWrapper/2 as wr
+import Trendoscope/ZigzagLite/3 as zg
+import Trendoscope/chartpatterns/10 as p
+indicator('Flags and Pennants [Trendoscope®]', 'F&P [Trendoscope®]', overlay = true, max_lines_count = 500, max_labels_count = 500, max_polylines_count = 100)
+
+openSource = input.source(open, '', inline = 'cs', group = 'Source', display = display.none)
+highSource = input.source(high, '', inline = 'cs', group = 'Source', display = display.none)
+lowSource = input.source(low, '', inline = 'cs', group = 'Source', display = display.none)
+closeSource = input.source(close, '', inline = 'cs', group = 'Source', display = display.none, tooltip = 'Source on which the zigzag and pattern calculation is done')
+
+useZigzag1 = input.bool(true, '', group = 'Zigzag', inline = 'z1', display = display.none)
+zigzagLength1 = input.int(3, step = 5, minval = 1, title = '', group = 'Zigzag', inline = 'z1', display = display.none)
+depth1 = input.int(144, '', step = 25, maxval = 500, group = 'Zigzag', inline = 'z1', display = display.none, tooltip = 'Enable and set Length and Dept of Zigzag 1')
+
+useZigzag2 = input.bool(true, '', group = 'Zigzag', inline = 'z2', display = display.none)
+zigzagLength2 = input.int(5, step = 5, minval = 1, title = '', group = 'Zigzag', inline = 'z2', display = display.none)
+depth2 = input.int(89, '', step = 25, maxval = 500, group = 'Zigzag', inline = 'z2', display = display.none, tooltip = 'Enable and set Length and Dept of Zigzag 2')
+
+useZigzag3 = input.bool(true, '', group = 'Zigzag', inline = 'z3', display = display.none)
+zigzagLength3 = input.int(8, step = 5, minval = 1, title = '', group = 'Zigzag', inline = 'z3', display = display.none)
+depth3 = input.int(55, '', step = 25, maxval = 500, group = 'Zigzag', inline = 'z3', display = display.none, tooltip = 'Enable and set Length and Dept of Zigzag 3')
+
+useZigzag4 = input.bool(true, '', group = 'Zigzag', inline = 'z4', display = display.none)
+zigzagLength4 = input.int(13, step = 5, minval = 1, title = '', group = 'Zigzag', inline = 'z4', display = display.none)
+depth4 = input.int(34, '', step = 25, maxval = 500, group = 'Zigzag', inline = 'z4', display = display.none, tooltip = 'Enable and set Length and Dept of Zigzag 4')
+
+errorThresold = input.float(20.0, 'Error Threshold', 0.0, 100, 5, 'Error Threshold for trend line validation', group = 'Scanning', display = display.none)
+flatThreshold = input.float(20.0, 'Flat Threshold', 0.0, 30, 5, 'Ratio threshold to identify the slope of trend lines', group = 'Scanning', display = display.none)
+flagRatio = input.float(0.618, 'Max Retracement', 0.1, 1.0, 0.05, 'Maximum Retracement of ABC ratio', group = 'Scanning', display = display.none)
+checkBarRatio = input.bool(false, 'Verify Bar Ratio ', 'Along with checking the price, also verify if the bars are proportionately placed.', group = 'Scanning', inline = 'br', display = display.none)
+barRatioLimit = input.float(0.382, '', group = 'Scanning', display = display.none, inline = 'br')
+avoidOverlap = input.bool(true, 'Avoid Overlap', group = 'Scanning', inline = 'a', display = display.none)
+repaint = input.bool(false, 'Repaint', 'Avoid Overlap - Will not consider the pattern if it starts before the end of an existing pattern\n\n' + 'Repaint - Allows repainting patterns if the new coordinates are better match.', group = 'Scanning', inline = 'a', display = display.none)
+
+theme = input.enum(ut.Theme.DARK, title = 'Theme', group = 'Display', inline = 'pc', tooltip = 'Chart theme settings. Line and label colors are generted based on the theme settings. If dark theme is selected, ' + 'lighter colors are used and if light theme is selected, darker colors are used.\n\n' + 'Pattern Line width - to be used for drawing pattern lines', display = display.none)
+patternLineWidth = input.int(2, '', minval = 1, inline = 'pc', group = 'Display', display = display.none)
+
+showPatternLabel = input.bool(true, 'Pattern Label', inline = 'pl1', group = 'Display', display = display.none)
+patternLabelSize = input.string(size.normal, '', [size.tiny, size.small, size.normal, size.large, size.huge], inline = 'pl1', group = 'Display', display = display.none, tooltip = 'Option to display Pattern Label and select the size')
+
+showPivotLabels = input.bool(true, 'Pivot Labels ', inline = 'pl2', group = 'Display', display = display.none, tooltip = 'Option to display pivot labels and select the size')
+pivotLabelSize = input.string(size.normal, '', [size.tiny, size.small, size.normal, size.large, size.huge], inline = 'pl2', group = 'Display', display = display.none)
+
+showZigzag = input.bool(true, 'Zigzag', inline = 'z', group = 'Display', display = display.none)
+zigzagColor = input.color(color.blue, '', inline = 'z', group = 'Display', display = display.none, tooltip = 'Option to display zigzag within pattern and the default zigzag line color')
+
+deleteOldPatterns = input.bool(true, 'Max Patterns', inline = 'do', group = 'Display', display = display.none)
+maxPatterns = input.int(20, '', minval = 1, step = 5, inline = 'do', group = 'Display', display = display.none, tooltip = 'If selected, only last N patterns will be preserved on the chart.')
+
+limitBars = input.int(5000, 'Limit Bars', minval = 1000, maxval = 20000, step = 1000, tooltip = 'Limit the number of bars on which the indicator is run', group = 'Backtest')
+errorRatio = errorThresold / 100
+flatRatio = flatThreshold / 100
+showLabel = true
+offset = 0
+
+type Scanner
+	bool enabled
+	string ticker
+	string timeframe
+	p.ScanProperties sProperties
+	p.DrawingProperties dProperties
+	array<p.Pattern> patterns
+	array<p.FNPPattern> fngPatterns
+	array<zg.Zigzag> zigzags
+
+type ScanProperties
+	int offset = 0
+	float errorRatio = 0.2
+	float flatRatio = 0.2
+	float flagRatio = 0.5
+	bool checkBarRatio = true
+	float barRatioLimit = 0.382
+	bool avoidOverlap = true
+	bool repaint = false
+	array<color> themeColors
+
+allowedPatterns = array.from(false, true, true, false, false, false, false, false, false, true, true, true, true, true) //Uptrend Channel true, //Downtrend Channel false, false, false, false, false, false, true, //Rising Wedge true, //Falling Wedge true, //Converging Triangle true, //Falling Triangle true //Rising Triangle )
+
+allowedLastPivotDirections = array.from(0, -1, 1, 0, 0, 0, 0, 0, 0, -1, 1, 0, 1, -1) // Uptrend Channel making a bearish flag 1, // Downtrend Channel making a bullish flag 0,0,0,0,0,0, -1, // Rising Wedge making bearish flag 1, //Falling wedge making bullish flag 0, //Converging triangle making pennant 1, //Falling Triangle making pennant -1 //Rising Triangle making pennant )
+
+method checkForOverlap(array<p.FNPPattern> this, p.FNPPattern currentPattern) =>
+    overlap = false
+    for fngPattern in this
+        start = fngPattern.pivots.first().point.index
+        end = fngPattern.pivots.last().point.index
+
+        currentStart = currentPattern.pivots.first().point.index
+        currentEnd = currentPattern.pivots.last().point.index
+        if currentStart >= start and currentStart <= end or currentEnd >= start and currentEnd <= end
+            overlap := true
+            break
+    overlap
+
+method getZigzagAndPattern(Scanner this, int length, int depth, array<o.OHLC> ohlcArray, int offset = 0) =>
+    var zg.Zigzag zigzag = zg.Zigzag.new(length, depth, 0)
+    var map<int, int> lastDBar = map.new<int, int>()
+    zigzag.calculate(array.from(highSource, lowSource))
+
+    var validPatterns = 0
+    mlzigzag = zigzag
+    if zigzag.flags.newPivot
+        while mlzigzag.zigzagPivots.size() >= 6 + offset
+            lastBar = mlzigzag.zigzagPivots.first().point.index
+            lastDir = int(math.sign(mlzigzag.zigzagPivots.first().dir))
+            if lastDBar.contains(mlzigzag.level) ? lastDBar.get(mlzigzag.level) < lastBar : true
+                lastDBar.put(mlzigzag.level, lastBar)
+                [valid, currentPattern] = mlzigzag.findPatternPlain(this.sProperties, this.dProperties, this.patterns, ohlcArray)
+                if valid
+                    this.patterns.push(currentPattern, maxPatterns * 2)
+                    [validFlag, currentFNGPattern] = mlzigzag.findFNP(currentPattern, this.sProperties)
+                    overlap = avoidOverlap and validFlag ? this.fngPatterns.checkForOverlap(currentFNGPattern) : false
+                    if validFlag and not overlap
+                        validPatterns := validPatterns + 1
+                        this.fngPatterns.push(currentFNGPattern, maxPatterns)
+                        currentFNGPattern.draw()
+                        alert('New Pattern Alert : ' + currentFNGPattern.patternName)
+            else
+                break
+            mlzigzag := mlzigzag.nextlevel()
+            mlzigzag
+    true
+
+method scan(Scanner this) =>
+    var array<o.OHLC> ohlcArray = array.new<o.OHLC>()
+    var array<p.Pattern> patterns = array.new<p.Pattern>()
+    ohlcArray.push(o.OHLC.new(openSource, highSource, lowSource, closeSource))
+    if useZigzag1
+        this.getZigzagAndPattern(zigzagLength1, depth1, ohlcArray)
+    if useZigzag2
+        this.getZigzagAndPattern(zigzagLength2, depth2, ohlcArray)
+    if useZigzag3
+        this.getZigzagAndPattern(zigzagLength3, depth3, ohlcArray)
+    if useZigzag4
+        this.getZigzagAndPattern(zigzagLength4, depth4, ohlcArray)
+
+if bar_index >= last_bar_index - limitBars
+    var scanner = Scanner.new(true, '', '',
+     p.ScanProperties.new(offset, 5, errorRatio, flatRatio, flagRatio, checkBarRatio, 
+                             barRatioLimit, avoidOverlap, repaint, allowedPatterns = allowedPatterns, 
+                             allowedLastPivotDirections = allowedLastPivotDirections, themeColors = theme.getColors()), 
+     p.DrawingProperties.new(patternLineWidth, showZigzag, 1, zigzagColor, showPatternLabel, patternLabelSize, showPivotLabels, 
+                             pivotLabelSize, deleteOnPop = deleteOldPatterns), array.new<p.Pattern>(), array.new<p.FNPPattern>())
+    scanner.scan()
