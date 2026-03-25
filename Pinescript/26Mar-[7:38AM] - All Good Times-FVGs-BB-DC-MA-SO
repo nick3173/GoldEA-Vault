@@ -1,0 +1,143 @@
+// © tradeforopp - ICT Master Suite [V12 Ultimate Customization]
+//@version=6
+indicator("ICT Master Suite [V12]", overlay=false, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
+
+// =====================
+// 0. SESSION UI & STYLE SETTINGS
+// =====================
+group_style  = "Session Label & BG Styles"
+show_kz_text = input.bool(true, "Show Session Names", group=group_style)
+lbl_style    = input.string("Label", "Text Style", options=["Label", "Price Label", "Simple Text"], group=group_style)
+lbl_size     = input.string("Small", "Font Size", options=["Tiny", "Small", "Normal", "Large"], group=group_style)
+lbl_color    = input.color(color.white, "Text Color", group=group_style)
+use_lbl_bg   = input.bool(true, "Show Label Background", group=group_style)
+lbl_bg_trans = input.int(20, "Label BG Transparency", 0, 100, group=group_style)
+box_transp   = input.int(92, "Session Box Transparency", 0, 100, group=group_style)
+
+// Logic for Pine Script size/style constants
+get_size(s) =>
+    switch s
+        "Tiny"   => size.tiny
+        "Small"  => size.small
+        "Normal" => size.normal
+        "Large"  => size.large
+        => size.small
+
+get_label_style() =>
+    switch lbl_style
+        "Label"       => label.style_label_down
+        "Price Label" => label.style_label_left
+        "Simple Text" => label.style_none
+        => label.style_label_down
+
+// =====================
+// 1. BOLLINGER BANDS (BB)
+// =====================
+group_bb   = "Bollinger Bands Equilibrium"
+show_bb    = input.bool(true, "Display BB", group=group_bb)
+bb_len     = input.int(40, "BB Length", minval=1, group=group_bb)
+bb_mult    = input.float(0.2, "BB StdDev Multiplier", step=0.1, group=group_bb)
+bb_color   = input.color(#2962FF, "BB Color", group=group_bb)
+
+bb_basis = ta.ema(close, bb_len)
+bb_dev   = bb_mult * ta.stdev(close, bb_len)
+p1 = plot(show_bb ? bb_basis + bb_dev : na, "BB Upper", color=color.new(bb_color, 80), force_overlay=true)
+p2 = plot(show_bb ? bb_basis - bb_dev : na, "BB Lower", color=color.new(bb_color, 80), force_overlay=true)
+fill(p1, p2, color=color.new(bb_color, 96), title="Equilibrium Fill")
+
+// =====================
+// 2. DONCHIAN CHANNELS (DC)
+// =====================
+group_dc   = "Donchian Channels"
+show_dc    = input.bool(true, "Display DC", group=group_dc)
+dc_len     = input.int(20, "DC Lookback", minval=1, group=group_dc)
+dc_color   = input.color(color.gray, "DC Color", group=group_dc)
+
+plot(show_dc ? ta.highest(high, dc_len) : na, "DC High", color=color.new(dc_color, 85), force_overlay=true)
+plot(show_dc ? ta.lowest(low, dc_len) : na,  "DC Low",  color=color.new(dc_color, 85), force_overlay=true)
+
+// =====================
+// 3. MOVING AVERAGES (MA)
+// =====================
+group_ma   = "Moving Averages"
+ema21_len  = input.int(21, "EMA 21", group=group_ma)
+ema50_len  = input.int(50, "EMA 50", group=group_ma)
+ema200_len = input.int(200, "EMA 200", group=group_ma)
+
+plot(ta.ema(close, ema21_len),  "EMA 21",  color=color.new(color.blue, 50),  force_overlay=true)
+plot(ta.ema(close, ema50_len),  "EMA 50",  color=color.new(color.orange, 50), force_overlay=true)
+plot(ta.ema(close, ema200_len), "EMA 200", color=color.new(color.red, 50),    force_overlay=true)
+
+// =====================
+// 4. FAIR VALUE GAPS (FVG)
+// =====================
+group_fvg  = "FVG Settings"
+show_fvg   = input.bool(true, "Display FVGs", group=group_fvg)
+fvg_look   = input.int(200, "Lookback Bars", group=group_fvg)
+bull_fvg_c = input.color(color.new(color.green, 90), "Bull FVG Color", group=group_fvg)
+bear_fvg_c = input.color(color.new(color.red, 90), "Bear FVG Color", group=group_fvg)
+
+if show_fvg and (last_bar_index - bar_index) <= fvg_look
+    if low > high[2]
+        box.new(bar_index[2], low, bar_index, high[2], bgcolor=bull_fvg_c, border_color=na, force_overlay=true)
+    if high < low[2]
+        box.new(bar_index[2], low[2], bar_index, high, bgcolor=bear_fvg_c, border_color=na, force_overlay=true)
+
+// =====================
+// 5. SESSION ENGINE (TFO Logic)
+// =====================
+group_kz = "Killzone Schedules"
+max_days = input.int(3, "History Drawing Limit (Days)", group=group_kz)
+
+f_draw_kz(sess_name, sess_time, sess_col) =>
+    var box[] boxes = array.new_box()
+    var label[] labels = array.new_label()
+    in_sess = not na(time(timeframe.period, sess_time, "America/New_York"))
+    is_new  = in_sess and na(time(timeframe.period, sess_time, "America/New_York")[1])
+    
+    if is_new
+        array.unshift(boxes, box.new(bar_index, high, bar_index, low, bgcolor=color.new(sess_col, box_transp), border_color=na, force_overlay=true))
+        if show_kz_text
+            // Set label color and background based on inputs
+            lb_c = use_lbl_bg ? color.new(sess_col, lbl_bg_trans) : color.new(color.black, 100)
+            array.unshift(labels, label.new(bar_index, high, sess_name, color=lb_c, textcolor=lbl_color, style=get_label_style(), size=get_size(lbl_size), force_overlay=true))
+        
+        if array.size(boxes) > max_days
+            box.delete(array.pop(boxes))
+            if show_kz_text
+                label.delete(array.pop(labels))
+                
+    if in_sess and array.size(boxes) > 0
+        cur_box = array.get(boxes, 0)
+        box.set_right(cur_box, bar_index)
+        box.set_top(cur_box, math.max(high, box.get_top(cur_box)))
+        box.set_bottom(cur_box, math.min(low, box.get_bottom(cur_box)))
+        if show_kz_text
+            cur_lbl = array.get(labels, 0)
+            label.set_x(cur_lbl, bar_index)
+            label.set_y(cur_lbl, box.get_top(cur_box))
+
+f_draw_kz("Asia",     input.session("2000-0000", "Asia Time", group=group_kz), color.blue)
+f_draw_kz("London",   input.session("0200-0500", "London Time", group=group_kz), color.red)
+f_draw_kz("NY AM",    input.session("0930-1100", "NY AM Time", group=group_kz), #089981)
+f_draw_kz("NY Lunch", input.session("1200-1300", "NY Lunch Time", group=group_kz), color.yellow)
+f_draw_kz("NY PM",    input.session("1330-1600", "NY PM Time", group=group_kz), color.purple)
+
+// =====================
+// 6. STOCH RSI (SO)
+// =====================
+group_so   = "Stoch RSI (SO) Settings"
+so_rsi_len = input.int(30, "RSI Length", group=group_so)
+so_stoch_l = input.int(30, "Stoch Length", group=group_so)
+so_k       = input.int(3, "K Smoothing", group=group_so)
+so_d       = input.int(3, "D Smoothing", group=group_so)
+
+rsi_val = ta.rsi(close, so_rsi_len)
+st_k = ta.sma(ta.stoch(rsi_val, rsi_val, rsi_val, so_stoch_l), so_k)
+st_d = ta.sma(st_k, so_d)
+
+plot(st_k, "Stoch K", color=#2962FF, linewidth=2)
+plot(st_d, "Stoch D", color=#FF6D00, linewidth=2)
+hline(80, "OB", color=color.new(color.gray, 50))
+hline(50, "EQ", color=color.new(color.gray, 70), linestyle=hline.style_dotted)
+hline(20, "OS", color=color.new(color.gray, 50))
