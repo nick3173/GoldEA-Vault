@@ -1,0 +1,73 @@
+//@version=6
+indicator("ICT/SMC High Prob - Donchian Edition - 50% Length", overlay=false, max_boxes_count=500)
+
+// =====================
+// 1. INPUTS & SETTINGS
+// =====================
+hpThreshold     = input.float(1.2, "Displacement Multiplier", minval=1.0, step=0.1)
+dcPeriod        = input.int(20, "Donchian Channel Period", minval=1)
+max_fvg_display = input.int(25, "Max FVGs per Side (Total 50)", minval=1) 
+fvg_extension   = input.int(50, "FVG Extension (Bars)", minval=1) // Reduced to 50 bars
+
+// =====================
+// 2. PRICE OVERLAY ELEMENTS (MAs, BB, & Donchian)
+// =====================
+plot(ta.sma(close, 21),  color=color.blue,   title="MA 21",  force_overlay=true)
+plot(ta.sma(close, 50),  color=color.orange, title="MA 50",  force_overlay=true)
+plot(ta.sma(close, 200), color=color.red,    title="MA 200", force_overlay=true)
+
+basis = ta.ema(close, 40), dev = 0.2 * ta.stdev(close, 40)
+uBB = plot(basis + dev, color=color.new(color.green, 50), force_overlay=true)
+lBB = plot(basis - dev, color=color.new(color.green, 50), force_overlay=true)
+fill(uBB, lBB, color=color.new(color.green, 95))
+
+dcUpper = ta.highest(high, dcPeriod), dcLower = ta.lowest(low, dcPeriod), dcMid = (dcUpper + dcLower) / 2
+plot(dcUpper, "DC Upper", color=color.new(color.gray, 50), force_overlay=true)
+plot(dcLower, "DC Lower", color=color.new(color.gray, 50), force_overlay=true)
+plot(dcMid,   "DC Midline", color=color.new(color.white, 70), style=plot.style_linebr, force_overlay=true)
+
+// =====================
+// 3. SMC LOGIC & BOXES (85% Transparency)
+// =====================
+var box[] bullFvgBoxes = array.new_box()
+var box[] bearFvgBoxes = array.new_box()
+
+bodySize     = math.abs(close - open)
+avgBody      = ta.sma(bodySize, 20)
+displacement = bodySize > avgBody * hpThreshold
+
+// Handle Bullish FVGs (Transparency 85)
+if displacement and low > high[2]
+    box b = box.new(bar_index[2], low, bar_index + fvg_extension, high[2], bgcolor=color.new(color.green, 85), border_color=na, force_overlay=true)
+    array.push(bullFvgBoxes, b)
+    if array.size(bullFvgBoxes) > max_fvg_display
+        box.delete(array.shift(bullFvgBoxes))
+
+// Handle Bearish FVGs (Transparency 85)
+if displacement and high < low[2]
+    box b = box.new(bar_index[2], low[2], bar_index + fvg_extension, high, bgcolor=color.new(color.red, 85), border_color=na, force_overlay=true)
+    array.push(bearFvgBoxes, b)
+    if array.size(bearFvgBoxes) > max_fvg_display
+        box.delete(array.shift(bearFvgBoxes))
+
+// Mitigation Logic: Stop extension on Body Close
+if array.size(bullFvgBoxes) > 0
+    for i = array.size(bullFvgBoxes) - 1 to 0
+        b = array.get(bullFvgBoxes, i)
+        if box.get_right(b) > bar_index and close < box.get_bottom(b)
+            box.set_right(b, bar_index)
+
+if array.size(bearFvgBoxes) > 0
+    for i = array.size(bearFvgBoxes) - 1 to 0
+        b = array.get(bearFvgBoxes, i)
+        if box.get_right(b) > bar_index and close > box.get_top(b)
+            box.set_right(b, bar_index)
+
+// =====================
+// 4. STOCHASTIC RSI
+// =====================
+rsiVal = ta.rsi(close, 14), stoch = ta.stoch(rsiVal, rsiVal, rsiVal, 30)
+k = ta.sma(stoch, 3), d = ta.sma(k, 3)
+plot(k, "K", color=#2962FF), plot(d, "D", color=#FF6D00)
+hline(80, "Upper Band", color=color.gray, linestyle=hline.style_dashed)
+hline(20, "Lower Band", color=color.gray, linestyle=hline.style_dashed)
