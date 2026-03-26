@@ -1,0 +1,157 @@
+// This source code is subject toit the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © tradeforopp
+// Full Unified Build: High-Visibility ICT Suite (Fixed DC & Dual BB)
+
+//@version=6
+indicator("ICT SMC + Dual BB + VWAP [Master]", overlay=false, max_boxes_count=500, max_lines_count=500)
+
+// =====================
+// 1. MOVING AVERAGES & DONCHIAN
+// =====================
+group_ma  = "Moving Averages & Donchian"
+show_ma   = input.bool(true, "Show MAs", group=group_ma)
+ma21_col  = input.color(color.new(color.blue, 50), "EMA 21 Color", group=group_ma)
+ma50_col  = input.color(color.new(color.orange, 50), "EMA 50 Color", group=group_ma)
+ma200_col = input.color(color.new(color.red, 50), "EMA 200 Color", group=group_ma)
+
+// DONCHIAN FIX: Increased default visibility
+dc_len    = input.int(20, "Donchian Period", group=group_ma)
+dc_col    = input.color(color.new(color.gray, 30), "Donchian Border Color", group=group_ma)
+dc_width  = input.int(2, "Donchian Thickness (px)", minval=1, group=group_ma)
+
+plot(show_ma ? ta.ema(close, 21) : na,  "EMA 21",  color=ma21_col,  force_overlay=true)
+plot(show_ma ? ta.ema(close, 50) : na,  "EMA 50",  color=ma50_col,  force_overlay=true)
+plot(show_ma ? ta.ema(close, 200) : na, "EMA 200", color=ma200_col, force_overlay=true)
+
+dc_up = ta.highest(high, dc_len)
+dc_lo = ta.lowest(low, dc_len)
+plot(dc_up, "Donchian Upper Boundary", color=dc_col, linewidth=dc_width, force_overlay=true)
+plot(dc_lo, "Donchian Lower Boundary", color=dc_col, linewidth=dc_width, force_overlay=true)
+
+// =====================
+// 2. VWAP
+// =====================
+group_vwap = "VWAP Settings"
+show_vwap  = input.bool(true, "Show VWAP Line", group=group_vwap)
+vwap_col   = input.color(color.yellow, "VWAP Main Color", group=group_vwap)
+vwap_width = input.int(2, "VWAP Width (px)", minval=1, group=group_vwap)
+
+my_vwap = ta.vwap(close)
+plot(show_vwap ? my_vwap : na, "VWAP Main Line", color=vwap_col, linewidth=vwap_width, force_overlay=true)
+
+// =====================
+// 3. REGULAR BB (20 / 2.0 - Reversal Ceiling)
+// =====================
+group_std_bb = "Regular BB (20/2.0 Ceiling)"
+show_std_bb  = input.bool(true, "Enable Regular BB 20", group=group_std_bb)
+std_len      = input.int(20, "BB 20 Length", group=group_std_bb)
+std_mult     = input.float(2.0, "BB 2.0 Multiplier", group=group_std_bb)
+std_col      = input.color(color.new(color.teal, 40), "BB 20 Border Color", group=group_std_bb)
+std_width    = input.int(2, "BB 20 Line Width (px)", group=group_std_bb)
+
+[std_basis, std_upper, std_lower] = ta.bb(close, std_len, std_mult)
+plot(show_std_bb ? std_upper : na, "Regular BB 20 Upper [Ceiling]", color=std_col, linewidth=std_width, force_overlay=true)
+plot(show_std_bb ? std_lower : na, "Regular BB 20 Lower [Floor]", color=std_col, linewidth=std_width, force_overlay=true)
+
+// =====================
+// 4. ICT BB (40 / 0.2 - Equilibrium)
+// =====================
+group_ict_bb = "ICT BB (40/0.2 Equilibrium)"
+show_ict_bb  = input.bool(true, "Enable ICT BB 40", group=group_ict_bb)
+ict_len      = input.int(40, "BB 40 Length", group=group_ict_bb)
+ict_mult     = input.float(0.2, "BB 0.2 Multiplier", step=0.1, group=group_ict_bb)
+ict_col      = input.color(color.new(color.blue, 60), "BB 40 Border Color", group=group_ict_bb)
+ict_fill     = input.color(color.new(color.blue, 95), "BB 40 Fill Color", group=group_ict_bb)
+
+ict_basis = ta.ema(close, ict_len)
+ict_dev   = ict_mult * ta.stdev(close, ict_len)
+ict_upp   = ict_basis + ict_dev
+ict_low   = ict_basis - ict_dev
+
+p1 = plot(show_ict_bb ? ict_upp : na, "ICT BB 40 Upper", color=ict_col, force_overlay=true)
+p2 = plot(show_ict_bb ? ict_low : na, "ICT BB 40 Lower", color=ict_col, force_overlay=true)
+fill(p1, p2, color=show_ict_bb ? ict_fill : na, title="ICT BB 40 Background Fill")
+
+// =====================
+// 5. SMC ENGINE (FVG)
+// =====================
+group_smc    = "SMC / FVG Logic"
+hpThreshold  = input.float(1.2, "Displacement Multiplier", group=group_smc)
+bull_fvg_col = input.color(color.new(color.green, 85), "Bullish FVG Color", group=group_smc)
+bear_fvg_col = input.color(color.new(color.red, 85), "Bearish FVG Color", group=group_smc)
+
+var bullFvgBoxes = array.new_box()
+var bearFvgBoxes = array.new_box()
+displacement = math.abs(close - open) > ta.sma(math.abs(close - open), 20) * hpThreshold
+
+if displacement and low > high[2]
+    b = box.new(bar_index[2], low, bar_index + 30, high[2], bgcolor=bull_fvg_col, border_color=na, force_overlay=true)
+    bullFvgBoxes.push(b)
+    if bullFvgBoxes.size() > 15
+        bullFvgBoxes.shift().delete()
+
+if displacement and high < low[2]
+    b = box.new(bar_index[2], low[2], bar_index + 30, high, bgcolor=bear_fvg_col, border_color=na, force_overlay=true)
+    bearFvgBoxes.push(b)
+    if bearFvgBoxes.size() > 15
+        bearFvgBoxes.shift().delete()
+
+if array.size(bullFvgBoxes) > 0
+    for i = 0 to array.size(bullFvgBoxes) - 1
+        box b = array.get(bullFvgBoxes, i)
+        if box.get_right(b) > bar_index and close < box.get_bottom(b)
+            box.set_right(b, bar_index)
+
+if array.size(bearFvgBoxes) > 0
+    for i = 0 to array.size(bearFvgBoxes) - 1
+        box b = array.get(bearFvgBoxes, i)
+        if box.get_right(b) > bar_index and close > box.get_top(b)
+            box.set_right(b, bar_index)
+
+// =====================
+// 6. KILLZONES
+// =====================
+group_kz  = "Killzone Settings"
+gmt_tz    = input.string('America/New_York', "Timezone", group=group_kz)
+asia_s    = input.session("2000-0000", "Asia Session", group=group_kz)
+lon_s     = input.session("0200-0500", "London Killzone", group=group_kz)
+ny_s      = input.session("0830-1100", "NY AM Killzone", group=group_kz)
+
+asia_col  = input.color(color.new(color.blue, 93), "Asia Color", group=group_kz)
+lon_col   = input.color(color.new(color.red, 93), "London Color", group=group_kz)
+ny_col    = input.color(color.new(color.green, 93), "NY Color", group=group_kz)
+
+f_draw_kz(sess, col, boxIn) =>
+    var box _resBox = boxIn
+    inSess = not na(time(timeframe.period, sess, gmt_tz))
+    if inSess
+        if not inSess[1]
+            _resBox := box.new(bar_index, high, bar_index, low, bgcolor=col, border_color=color.new(col, 50), force_overlay=true)
+        else if not na(_resBox)
+            box.set_right(_resBox, bar_index)
+            box.set_top(_resBox, math.max(box.get_top(_resBox), high))
+            box.set_bottom(_resBox, math.min(box.get_bottom(_resBox), low))
+    _resBox
+
+var box aBox = na
+var box lBox = na
+var box nBox = na
+
+aBox := f_draw_kz(asia_s, asia_col, aBox)
+lBox := f_draw_kz(lon_s, lon_col, lBox)
+nBox := f_draw_kz(ny_s, ny_col, nBox)
+
+// =====================
+// 7. STOCHASTIC RSI (Lower Panel)
+// =====================
+group_stoch = "Stoch RSI"
+stoch_k_col = input.color(#2962FF, "Stoch K Color", group=group_stoch)
+stoch_d_col = input.color(#FF6D00, "Stoch D Color", group=group_stoch)
+
+rsiVal = ta.rsi(close, 14)
+stoch  = ta.stoch(rsiVal, rsiVal, rsiVal, 14)
+k = ta.sma(stoch, 3), d = ta.sma(k, 3)
+plot(k, "Stoch K", color=stoch_k_col, linewidth=2)
+plot(d, "Stoch D", color=stoch_d_col, linewidth=2)
+hline(80, "Upper Band", color=color.new(color.gray, 50), linestyle=hline.style_dashed)
+hline(20, "Lower Band", color=color.new(color.gray, 50), linestyle=hline.style_dashed)
