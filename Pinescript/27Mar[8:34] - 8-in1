@@ -1,0 +1,156 @@
+// © tradeforopp - ICT Master Suite [V12 BB Freedom - Full Session Restore]
+//@version=6
+indicator("ICT Master Suite [V12]", overlay=false, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
+
+// =====================
+// 0. SESSION UI & STYLE SETTINGS (PRESERVED)
+// =====================
+group_style  = "Session Label & BG Styles"
+show_kz_text = input.bool(true, "Show Session Names", group=group_style)
+lbl_style    = input.string("Label", "Text Style", options=["Label", "Price Label", "Simple Text"], group=group_style)
+lbl_size     = input.string("Small", "Font Size", options=["Tiny", "Small", "Normal", "Large"], group=group_style)
+lbl_color    = input.color(color.white, "Text Color", group=group_style)
+use_lbl_bg   = input.bool(true, "Show Label Background", group=group_style)
+lbl_bg_trans = input.int(20, "Label BG Transparency", 0, 100, group=group_style)
+box_transp   = input.int(92, "Session Box Transparency", 0, 100, group=group_style)
+
+get_size(s) =>
+    switch s
+        "Tiny"   => size.tiny
+        "Small"  => size.small
+        "Normal" => size.normal
+        "Large"  => size.large
+        => size.small
+
+get_label_style() =>
+    switch lbl_style
+        "Label"       => label.style_label_down
+        "Price Label" => label.style_label_left
+        "Simple Text" => label.style_none
+        => label.style_label_down
+
+// =====================
+// 1. DUAL BOLLINGER BANDS (40/0.2 & 20/2.0)
+// =====================
+// --- BB 40 (EQUILIBRIUM) ---
+group_bb40    = "ICT BB 40 (Equilibrium)"
+show_bb40     = input.bool(true, "Display BB 40", group=group_bb40)
+bb40_len      = input.int(40, "BB 40 Length", group=group_bb40)
+bb40_mult     = input.float(0.2, "BB 0.2 Mult", step=0.1, group=group_bb40)
+bb40_line_col = input.color(color.new(#2962FF, 50), "BB 40 Line Color", group=group_bb40)
+bb40_fill_col = input.color(color.new(#2962FF, 94), "BB 40 Fill Color", group=group_bb40)
+
+bb40_basis = ta.ema(close, bb40_len)
+bb40_dev   = bb40_mult * ta.stdev(close, bb40_len)
+p40_u = plot(show_bb40 ? bb40_basis + bb40_dev : na, "BB 40 Upper", color=bb40_line_col, force_overlay=true)
+p40_l = plot(show_bb40 ? bb40_basis - bb40_dev : na, "BB 40 Lower", color=bb40_line_col, force_overlay=true)
+fill(p40_u, p40_l, color=show_bb40 ? bb40_fill_col : na, title="ICT BB 40 Fill")
+
+// --- BB 20 (CEILING) ---
+group_bb20    = "Regular BB 20 (Ceiling)"
+show_bb20     = input.bool(true, "Display BB 20", group=group_bb20)
+bb20_len      = input.int(20, "BB 20 Length", group=group_bb20)
+bb20_mult     = input.float(2.0, "BB 2.0 Mult", group=group_bb20)
+bb20_line_col = input.color(color.new(#00ff88, 40), "BB 20 Line Color", group=group_bb20)
+bb20_fill_col = input.color(color.new(#00ff88, 92), "BB 20 Fill Color", group=group_bb20)
+
+[bb20_basis, bb20_upper, bb20_lower] = ta.bb(close, bb20_len, bb20_mult)
+p20_u = plot(show_bb20 ? bb20_upper : na, "BB 20 Upper", color=bb20_line_col, linewidth=2, force_overlay=true)
+p20_l = plot(show_bb20 ? bb20_lower : na, "BB 20 Lower", color=bb20_line_col, linewidth=2, force_overlay=true)
+fill(p20_u, p20_l, color=show_bb20 ? bb20_fill_col : na, title="Regular BB 20 Fill")
+
+// =====================
+// 2. VWAP & DONCHIAN
+// =====================
+group_v_d  = "VWAP & Donchian"
+show_vwap  = input.bool(true, "Show VWAP", group=group_v_d)
+vwap_col   = input.color(color.yellow, "VWAP Color", group=group_v_d)
+show_dc    = input.bool(true, "Show Donchian", group=group_v_d)
+dc_len     = input.int(20, "DC Length", group=group_v_d)
+dc_col     = input.color(color.new(color.gray, 30), "DC Color", group=group_v_d)
+
+plot(show_vwap ? ta.vwap(close) : na, "VWAP Line", color=vwap_col, linewidth=2, force_overlay=true)
+plot(show_dc ? ta.highest(high, dc_len) : na, "DC High", color=dc_col, force_overlay=true)
+plot(show_dc ? ta.lowest(low, dc_len) : na,  "DC Low",  color=dc_col, force_overlay=true)
+
+// =====================
+// 3. MOVING AVERAGES (EMA)
+// =====================
+group_ma    = "Moving Averages"
+show_ma     = input.bool(true, "Show MAs", group=group_ma)
+plot(show_ma ? ta.ema(close, 21) : na,  "EMA 21",  color=color.blue,   force_overlay=true)
+plot(show_ma ? ta.ema(close, 50) : na,  "EMA 50",  color=color.orange, force_overlay=true)
+plot(show_ma ? ta.ema(close, 200) : na, "EMA 200", color=color.red,    force_overlay=true)
+
+// =====================
+// 4. FAIR VALUE GAPS (FVG)
+// =====================
+group_fvg   = "FVG Settings"
+show_fvg    = input.bool(true, "Display FVGs", group=group_fvg)
+fvg_look    = input.int(200, "Lookback Bars", group=group_fvg)
+bull_fvg_c  = input.color(color.new(color.green, 90), "Bull FVG Color", group=group_fvg)
+bear_fvg_c  = input.color(color.new(color.red, 90), "Bear FVG Color", group=group_fvg)
+
+if show_fvg and (last_bar_index - bar_index) <= fvg_look
+    if low > high[2]
+        box.new(bar_index[2], low, bar_index, high[2], bgcolor=bull_fvg_c, border_color=na, force_overlay=true)
+    if high < low[2]
+        box.new(bar_index[2], low[2], bar_index, high, bgcolor=bear_fvg_c, border_color=na, force_overlay=true)
+
+// =====================
+// 5. SESSION ENGINE (ALL SESSIONS RESTORED)
+// =====================
+group_kz = "Killzone Schedules"
+max_days = input.int(3, "History Drawing Limit (Days)", group=group_kz)
+
+f_draw_kz(sess_name, sess_time, sess_col) =>
+    var box[] boxes = array.new_box()
+    var label[] labels = array.new_label()
+    in_sess = not na(time(timeframe.period, sess_time, "America/New_York"))
+    is_new  = in_sess and na(time(timeframe.period, sess_time, "America/New_York")[1])
+    
+    if is_new
+        array.unshift(boxes, box.new(bar_index, high, bar_index, low, bgcolor=color.new(sess_col, box_transp), border_color=na, force_overlay=true))
+        if show_kz_text
+            lb_c = use_lbl_bg ? color.new(sess_col, lbl_bg_trans) : color.new(color.black, 100)
+            array.unshift(labels, label.new(bar_index, high, sess_name, color=lb_c, textcolor=lbl_color, style=get_label_style(), size=get_size(lbl_size), force_overlay=true))
+        
+        if array.size(boxes) > max_days
+            box.delete(array.pop(boxes))
+            if show_kz_text
+                label.delete(array.pop(labels))
+                
+    if in_sess and array.size(boxes) > 0
+        cur_box = array.get(boxes, 0)
+        box.set_right(cur_box, bar_index)
+        box.set_top(cur_box, math.max(high, box.get_top(cur_box)))
+        box.set_bottom(cur_box, math.min(low, box.get_bottom(cur_box)))
+        if show_kz_text
+            cur_lbl = array.get(labels, 0)
+            label.set_x(cur_lbl, bar_index)
+            label.set_y(cur_lbl, box.get_top(cur_box))
+
+f_draw_kz("Asia",     input.session("2000-0000", "Asia Time", group=group_kz), color.blue)
+f_draw_kz("London",   input.session("0200-0500", "London Time", group=group_kz), color.red)
+f_draw_kz("NY AM",    input.session("0930-1100", "NY AM Time", group=group_kz), #089981)
+f_draw_kz("NY Lunch", input.session("1200-1300", "NY Lunch Time", group=group_kz), color.yellow)
+f_draw_kz("NY PM",    input.session("1330-1600", "NY PM Time", group=group_kz), color.purple)
+
+// =====================
+// 6. STOCH RSI (SO)
+// =====================
+group_so   = "Stoch RSI (SO) Settings"
+so_rsi_len = input.int(30, "RSI Length", group=group_so)
+so_stoch_l = input.int(30, "Stoch Length", group=group_so)
+so_k       = input.int(3, "K Smoothing", group=group_so)
+so_d       = input.int(3, "D Smoothing", group=group_so)
+
+rsi_val = ta.rsi(close, so_rsi_len)
+st_k = ta.sma(ta.stoch(rsi_val, rsi_val, rsi_val, so_stoch_l), so_k)
+st_d = ta.sma(st_k, so_d)
+
+plot(st_k, "Stoch K", color=#2962FF, linewidth=2)
+plot(st_d, "Stoch D", color=#FF6D00, linewidth=2)
+hline(80, "OB", color=color.new(color.gray, 50))
+hline(50, "EQ", color=color.new(color.gray, 70), linestyle=hline.style_dotted)
+hline(20, "OS", color=color.new(color.gray, 50))
