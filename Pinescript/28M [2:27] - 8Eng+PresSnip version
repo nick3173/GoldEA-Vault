@@ -1,0 +1,91 @@
+// © tradeforopp - ICT Master Suite [V12 BB Freedom] + Precision Sniper Core
+//@version=6
+indicator("ICT Master Suite [V12] + Sniper Core", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
+
+// =====================
+// 0. STYLE & SESSION SETTINGS
+// =====================
+group_style  = "🎨 Session & Label Styles"
+show_kz_text = input.bool(true, "Show Session Names", group=group_style)
+lbl_size     = input.string("Small", "Font Size", options=["Tiny", "Small", "Normal", "Large"], group=group_style)
+lbl_color    = input.color(color.white, "Text Color", group=group_style)
+box_transp   = input.int(92, "Session Box Transparency", 0, 100, group=group_style)
+
+// =====================
+// 1. TREND & STRUCTURE (Core ICT)
+// =====================
+group_ma     = "📏 Moving Averages (Trend)"
+ema21_len    = input.int(21, "EMA 21 (Fast)", group=group_ma)
+ema50_len    = input.int(50, "EMA 50 (Slow)", group=group_ma)
+ema200_len   = input.int(200, "EMA 200 (Macro)", group=group_ma)
+
+ema21  = ta.ema(close, ema21_len)
+ema50  = ta.ema(close, ema50_len)
+ema200 = ta.ema(close, ema200_len)
+
+plot(ema21,  "EMA 21",  color=color.new(color.blue, 0), linewidth=2)
+plot(ema50,  "EMA 50",  color=color.new(color.orange, 0), linewidth=2)
+plot(ema200, "EMA 200", color=color.new(color.red, 0), linewidth=2)
+
+// =====================
+// 2. SNIPER CONFLUENCE ENGINE (New Integration)
+// =====================
+group_sniper = "🎯 Sniper Entry Logic"
+minScore     = input.int(6, "Min Confluence Score (1-10)", minval=1, maxval=10, group=group_sniper)
+rsiLen       = input.int(13, "Sniper RSI Length", group=group_sniper)
+
+// Scoring Components
+rsiVal   = ta.rsi(close, rsiLen)
+[macdLine, macdSig, macdHist] = ta.macd(close, 12, 26, 9)
+volSma   = ta.sma(volume, 20)
+[diPlus, diMinus, adxVal] = ta.dmi(14, 14)
+
+float bullScore = 0.0
+bullScore += (ema21 > ema50)         ? 1.5 : 0.0 // Trend Bias
+bullScore += (close > ema200)        ? 1.0 : 0.0 // Macro Bias
+bullScore += (rsiVal > 50 and rsiVal < 75) ? 1.0 : 0.0 // RSI Momentum
+bullScore += (macdHist > 0)          ? 1.0 : 0.0 // MACD Hist
+bullScore += (macdLine > macdSig)    ? 1.0 : 0.0 // MACD Cross
+bullScore += (volume > volSma * 1.2) ? 1.0 : 0.0 // Volume Spike
+bullScore += (adxVal > 20 and diPlus > diMinus) ? 1.5 : 0.0 // Strong ADX Bull
+
+float bearScore = 0.0
+bearScore += (ema21 < ema50)         ? 1.5 : 0.0
+bearScore += (close < ema200)        ? 1.0 : 0.0
+bearScore += (rsiVal < 50 and rsiVal > 25) ? 1.0 : 0.0
+bearScore += (macdHist < 0)          ? 1.0 : 0.0
+bearScore += (macdLine < macdSig)    ? 1.0 : 0.0
+bearScore += (volume > volSma * 1.2) ? 1.0 : 0.0
+bearScore += (adxVal > 20 and diMinus > diPlus) ? 1.5 : 0.0
+
+// Signal Logic
+bool sniperBuy  = ta.crossover(ema21, ema50) and bullScore >= minScore
+bool sniperSell = ta.crossunder(ema21, ema50) and bearScore >= minScore
+
+// =====================
+// 3. VISUAL SIGNALS
+// =====================
+plotshape(sniperBuy,  title="Sniper Buy",  style=shape.labelup,   location=location.belowbar, color=color.green, text="BUY",  textcolor=color.white, size=size.small)
+plotshape(sniperSell, title="Sniper Sell", style=shape.labeldown, location=location.abovebar, color=color.red,   text="SELL", textcolor=color.white, size=size.small)
+
+// =====================
+// 4. FAIR VALUE GAPS (ICT)
+// =====================
+show_fvg   = input.bool(true, "Display FVGs", group="ICT Settings")
+if show_fvg
+    if low > high[2]
+        box.new(bar_index[2], low, bar_index, high[2], bgcolor=color.new(color.green, 90), border_color=na)
+    if high < low[2]
+        box.new(bar_index[2], low[2], bar_index, high, bgcolor=color.new(color.red, 90), border_color=na)
+
+// =====================
+// 5. MINI DASHBOARD
+// =====================
+var table dash = table.new(position.top_right, 2, 3, bgcolor=color.new(color.black, 20), border_width=1)
+if barstate.islast
+    float activeScore = math.max(bullScore, bearScore)
+    color scoreCol = activeScore >= 7 ? color.green : activeScore >= 5 ? color.yellow : color.red
+    table.cell(dash, 0, 0, "Trend:", text_color=color.white)
+    table.cell(dash, 1, 0, ema21 > ema50 ? "BULLISH" : "BEARISH", text_color=ema21 > ema50 ? color.green : color.red)
+    table.cell(dash, 0, 1, "Sniper Score:", text_color=color.white)
+    table.cell(dash, 1, 1, str.tostring(activeScore, "#.#") + " / 10", text_color=scoreCol)
